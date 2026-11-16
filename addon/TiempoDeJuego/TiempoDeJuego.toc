@@ -2,7 +2,7 @@
 ## Title: Tiempo de Juego
 ## Notes: Limite semanal de horas compartido entre amigos, estadisticas y avisos.
 ## Author: Grupo de amigos
-## Version: 2.2
+## Version: 2.3
 ## SavedVariables: TiempoDeJuegoDB
 
 TiempoDeJuego.lua

@@ -24,3 +24,6 @@ alter table tdj_dias add column if not exists kills      integer not null defaul
 alter table tdj_dias add column if not exists xp         integer not null default 0 check (xp between 0 and 100000000);
 -- Cuando llego el ultimo dato "en vivo" (mientras la persona juega)
 alter table tdj_dias add column if not exists en_vivo    timestamptz;
+-- v2.3: estimacion de hoy mientras la persona juega (la manda el subidor al ver el juego abierto).
+-- No pisa "segundos": el dato exacto llega con cada /reload y al cerrar el juego.
+alter table tdj_dias add column if not exists segundos_vivo integer not null default 0 check (segundos_vivo between 0 and 86400);

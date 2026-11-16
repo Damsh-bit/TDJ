@@ -4,9 +4,8 @@
 -- panel de opciones y datos "en vivo" para la web.
 
 local PREFIJO = "TDJ1"
-local VERSION = "2.2"
+local VERSION = "2.3"
 local ENVIO_CADA = 60          -- segundos entre envios de estado a los amigos
-local VIVO_CADA = 120          -- segundos entre datos "en vivo" para la web
 local ONLINE_SI_VISTO = 180    -- si no llega nada en este tiempo, el amigo figura desconectado
 local UMBRALES = { 5 * 3600, 2 * 3600, 3600, 1800, 600, 0 } -- avisos de lo que queda en la semana
 local RECORDATORIO_EXTRA = 900 -- cada 15 min pasado el limite, recordar
@@ -18,7 +17,7 @@ local OPCIONES_DEFECTO = {
     mostrarBarra = true, bloquear = false, mostrarAmigos = true, mostrarStats = true, escala = 1.0,
     avisosPantalla = true, sonido = true,
     chatNivel = true, chatLimite = true, chatHitos = true, chatConexion = true,
-    avisoHermandad = false, enVivo = true,
+    avisoHermandad = false,
 }
 
 local ICONO = {
@@ -378,94 +377,17 @@ local function revisarAvisos()
 end
 
 ---------------------------------------------------------------------------
--- Datos "en vivo" para la web
--- El addon se susurra a si mismo una linea "TDJ:..." cada 2 minutos. El juego la
--- guarda en Logs\WoWChatLog.txt (con el registro de chat activado) y el subidor
--- la lee mientras jugas. La linea no se muestra en el chat.
+-- Fila de un dia en el formato que lee el subidor:
+--   persona,dia,segundos,nivel,personaje,clase,limiteSemanal,fuente,misiones,muertes,oroGanado,oroGastado,kills,xp
+-- (Mientras jugas, el subidor ve que el juego esta abierto y manda una estimacion
+-- "en vivo" a la web; el dato exacto llega con cada /reload y al cerrar el juego.)
 ---------------------------------------------------------------------------
-local function campo(s) return (tostring(s or ""):gsub("[,~\"\\|;:]", "")) end
+local function campo(s) return (tostring(s or ""):gsub("[,~\"\|;:]", "")) end
 
 local function filaPropia(d, r)
     return table.concat({ campo(miNombre()), d, floor(r.seg or 0), r.nivel or 0, campo(r.ultimoPj), campo(r.clase),
         limiteSemSeg(), "propio", r.misiones or 0, r.muertes or 0, floor(r.oroG or 0), floor(r.oroS or 0),
         r.kills or 0, r.xp or 0 }, ",")
-end
-
--- En WoW Forever los personajes se llaman "Nombre-Reino": hay que susurrar con el
--- nombre completo o el servidor contesta "no hay ningun jugador con ese nombre".
-local function miNombreCompleto()
-    local nombre, reino = UnitFullName and UnitFullName("player")
-    nombre = nombre or UnitName("player")
-    if not reino or reino == "" then reino = GetNormalizedRealmName and GetNormalizedRealmName() end
-    if reino and reino ~= "" then return nombre .. "-" .. reino end
-    return nombre
-end
-
-local vivoEnviadoEn, vivoFallas, vivoRoto = 0, 0, false
-
--- El juego guarda el registro de chat en memoria y lo escribe al disco recien
--- al cerrar. Apagarlo y prenderlo lo obliga a escribirlo, asi el subidor ve
--- la linea "TDJ:" mientras jugas.
-local function volcarRegistroChat()
-    if LoggingChat and LoggingChat() then
-        vivoEnviadoEn = GetTime() -- para ocultar los avisos "registro de chat activado/desactivado"
-        LoggingChat(false)
-        LoggingChat(true)
-    end
-end
-
-local function enviarVivo()
-    if not OP.enVivo or vivoRoto then return end
-    local r, d = registroHoy()
-    vivoEnviadoEn = GetTime()
-    pcall(SendChatMessage, "TDJ:" .. filaPropia(d, r), "WHISPER", nil, miNombreCompleto())
-    if C_Timer and C_Timer.After then C_Timer.After(2, volcarRegistroChat) end
-end
-
--- Patron para reconocer el aviso "no hay ningun jugador llamado X" en cualquier idioma
-local patronNoEncontrado
-if type(ERR_CHAT_PLAYER_NOT_FOUND_S) == "string" then
-    local p = ERR_CHAT_PLAYER_NOT_FOUND_S:gsub("[%%%(%)%.%+%-%*%?%[%]%^%$]", "%%%0") -- escapa caracteres especiales
-    p = p:gsub("%%%%s", ".-") -- el "%s" del nombre (ya escapado como "%%s") pasa a ser "cualquier cosa"
-    patronNoEncontrado = "^" .. p .. "$"
-end
-local vivoContadoPara = -1
-
-local function filtroVivo(_, _, msg) return type(msg) == "string" and msg:find("^TDJ:") ~= nil end
-
--- Si el susurro falla, el aviso del sistema no se muestra; a las 3 fallas seguidas
--- el modo en vivo se apaga por esta sesion (las horas se suben igual al cerrar).
-local function filtroSistema(_, _, msg)
-    if type(msg) ~= "string" or GetTime() - vivoEnviadoEn > 4 then return false end
-    if msg == CHATLOGENABLED or msg == CHATLOGDISABLED then return true end
-    local esNuestro
-    if patronNoEncontrado then esNuestro = msg:find(patronNoEncontrado)
-    else esNuestro = msg:find(UnitName("player"), 1, true) end
-    if not esNuestro then return false end
-    -- El filtro corre una vez por cada ventana de chat: se cuenta una sola falla por susurro
-    if vivoContadoPara == vivoEnviadoEn then return true end
-    vivoContadoPara = vivoEnviadoEn
-    vivoFallas = vivoFallas + 1
-    if vivoFallas >= 3 and not vivoRoto then
-        vivoRoto = true
-        chat(ICONO.casi, "Los datos en vivo no funcionan en este servidor. Tus horas se suben igual cuando cerrás el juego.")
-    end
-    return true
-end
-
-local function alSusurroOk(_, _, msg)
-    if filtroVivo(nil, nil, msg) then vivoFallas = 0; return true end
-    return false
-end
-
-if ChatFrame_AddMessageEventFilter then
-    ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", filtroVivo)
-    ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER_INFORM", alSusurroOk)
-    ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", filtroSistema)
-end
-
-local function activarRegistroChat()
-    if OP.enVivo and LoggingChat and not LoggingChat() then LoggingChat(true) end
 end
 
 ---------------------------------------------------------------------------
@@ -642,13 +564,9 @@ local function crearPanel()
     casilla("Conexiones", "chatConexion")
     casilla("Anunciar mi límite en la hermandad", "avisoHermandad")
     finFila()
-
-    seccion("Web")
-    casilla("Datos en vivo mientras juego", "enVivo", activarRegistroChat)
-    finFila()
     local nota = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    nota:SetPoint("TOPLEFT", 24, y + 2); nota:SetPoint("RIGHT", f, "RIGHT", -18, 0); nota:SetJustifyH("LEFT")
-    nota:SetText("Activa el registro de chat del juego para que el subidor mande tus horas a la web mientras jugás, sin esperar a que cierres.")
+    nota:SetPoint("TOPLEFT", 24, y - 6); nota:SetPoint("RIGHT", f, "RIGHT", -18, 0); nota:SetJustifyH("LEFT")
+    nota:SetText("La web se actualiza sola: mientras jugás el subidor manda una estimación cada minuto, y el dato exacto llega con cada /reload y al cerrar el juego.")
 
     local cerrar = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     cerrar:SetSize(100, 22); cerrar:SetPoint("BOTTOM", 0, 14); cerrar:SetText("Cerrar")
@@ -686,12 +604,25 @@ end
 local eventos = CreateFrame("Frame")
 for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_LEVEL_UP", "CHAT_MSG_ADDON", "BN_CHAT_MSG_ADDON",
     "GROUP_ROSTER_UPDATE", "PLAYER_LOGOUT", "PLAYER_MONEY", "QUEST_TURNED_IN", "PLAYER_DEAD", "PLAYER_XP_UPDATE",
-    "COMBAT_LOG_EVENT_UNFILTERED" }) do
+    "CHAT_MSG_COMBAT_XP_GAIN" }) do
     pcall(eventos.RegisterEvent, eventos, e)
 end
 
+-- Enemigos derrotados: se cuenta cada "X muere, obtienes N p. de experiencia"
+-- (el mismo mensaje que ves en el chat), en el idioma que tenga el juego.
+local patronKill
+do
+    local plantilla = type(COMBATLOG_XPGAIN_FIRSTPERSON) == "string" and COMBATLOG_XPGAIN_FIRSTPERSON
+    if plantilla then
+        local p = plantilla:gsub("%%%d%$", "%%")                         -- "%1$s" -> "%s"
+        p = p:gsub("[%%%(%)%.%+%-%*%?%[%]%^%$]", "%%%0")                 -- escapa caracteres especiales
+        p = p:gsub("%%%%s", ".-"):gsub("%%%%d", "%%d+")                  -- nombre y numero
+        patronKill = "^" .. p
+    end
+end
+
 local contando = false
-local acumulado, desdeEnvio, desdeVivo = 0, 0, 0
+local acumulado, desdeEnvio = 0, 0
 
 eventos:SetScript("OnEvent", function(self, evento, ...)
     if evento == "ADDON_LOADED" then
@@ -723,7 +654,6 @@ eventos:SetScript("OnEvent", function(self, evento, ...)
         anotarPersonaje(registroHoy())
         ultimoOro = GetMoney()
         ultimoXP, ultimoXPMax, ultimoNivel = UnitXP("player"), UnitXPMax("player"), UnitLevel("player")
-        activarRegistroChat()
         actualizarUI()
         enviar("Q")
         pedirEnvio(5)
@@ -750,13 +680,9 @@ eventos:SetScript("OnEvent", function(self, evento, ...)
         local r = registroHoy()
         sumar(r, "muertes", 1)
         if HITOS_MUERTES[r.muertes] then enviarEvento("MUERTES", r.muertes) end
-    elseif evento == "COMBAT_LOG_EVENT_UNFILTERED" then
-        if CombatLogGetCurrentEventInfo then
-            local _, sub, _, origen = CombatLogGetCurrentEventInfo()
-            if sub == "PARTY_KILL" and (origen == UnitGUID("player") or origen == UnitGUID("pet")) then
-                sumar(registroHoy(), "kills", 1)
-            end
-        end
+    elseif evento == "CHAT_MSG_COMBAT_XP_GAIN" then
+        local msg = ...
+        if type(msg) == "string" and patronKill and msg:find(patronKill) then sumar(registroHoy(), "kills", 1) end
 
     elseif evento == "GROUP_ROSTER_UPDATE" then
         pedirEnvio(4)
@@ -778,7 +704,7 @@ eventos:SetScript("OnUpdate", function(self, transcurrido)
     if not r.ultimoPj then anotarPersonaje(r) end -- arranco un dia nuevo jugando
     r.limiteSemanal = limiteSemSeg()
     if OP.contarAFK or not UnitIsAFK("player") then r.seg = r.seg + acumulado end
-    desdeEnvio, desdeVivo = desdeEnvio + acumulado, desdeVivo + acumulado
+    desdeEnvio = desdeEnvio + acumulado
     acumulado = 0
 
     revisarAvisos()
@@ -786,7 +712,6 @@ eventos:SetScript("OnUpdate", function(self, transcurrido)
         desdeEnvio, proximoEnvio = 0, 0
         enviarEstado()
     end
-    if desdeVivo >= VIVO_CADA then desdeVivo = 0; enviarVivo() end
     if marco:IsShown() then actualizarUI() end
 end)
 

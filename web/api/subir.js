@@ -63,6 +63,26 @@ export default async function handler(req, res) {
   const filas = [...unicas.values()];
   if (!filas.length) return res.status(200).json({ ok: true, filas: 0 });
 
+  // Dato "en vivo" (el subidor ve el juego abierto): solo actualiza la estimacion
+  // de hoy y la marca de "jugando ahora". Nunca pisa los segundos exactos.
+  if (vivo) {
+    await sql.query(
+      `insert into tdj_dias (persona, dia, segundos, nivel, personaje, clase, limite_semanal, fuente, segundos_vivo, en_vivo)
+       select persona, dia, 0, nivel, personaje, clase, limite_semanal, 'propio', segundos, now()
+       from jsonb_to_recordset($1::jsonb) as x(persona text, dia date, segundos int, nivel smallint, personaje text,
+            clase text, limite_semanal int)
+       on conflict (persona, dia) do update set
+         segundos_vivo  = excluded.segundos_vivo,
+         en_vivo        = now(),
+         nivel          = greatest(tdj_dias.nivel, excluded.nivel),
+         limite_semanal = greatest(tdj_dias.limite_semanal, excluded.limite_semanal),
+         personaje      = coalesce(tdj_dias.personaje, excluded.personaje),
+         clase          = coalesce(tdj_dias.clase, excluded.clase)`,
+      [JSON.stringify(filas)]
+    );
+    return res.status(200).json({ ok: true, filas: filas.length, vivo: true });
+  }
+
   // Los contadores del dia solo suben (los datos "de amigo" pueden llegar incompletos)
   // y los datos propios mandan sobre los "de amigo".
   const propio = (col) => `case when tdj_dias.fuente = 'propio' and excluded.fuente = 'amigo' then tdj_dias.${col} else excluded.${col} end`;
@@ -70,7 +90,7 @@ export default async function handler(req, res) {
     `insert into tdj_dias (persona, dia, segundos, nivel, personaje, clase, limite, limite_semanal, fuente,
                            misiones, muertes, oro_ganado, oro_gastado, kills, xp, en_vivo)
      select persona, dia, segundos, nivel, personaje, clase, limite, limite_semanal, fuente,
-            misiones, muertes, oro_ganado, oro_gastado, kills, xp, case when $2 then now() end
+            misiones, muertes, oro_ganado, oro_gastado, kills, xp, null
      from jsonb_to_recordset($1::jsonb) as x(persona text, dia date, segundos int, nivel smallint, personaje text,
           clase text, limite int, limite_semanal int, fuente text, misiones int, muertes int, oro_ganado bigint,
           oro_gastado bigint, kills int, xp int)
@@ -81,9 +101,9 @@ export default async function handler(req, res) {
        limite         = ${propio("limite")},
        limite_semanal = greatest(tdj_dias.limite_semanal, ${propio("limite_semanal")}),
        fuente         = case when tdj_dias.fuente = 'propio' then 'propio' else excluded.fuente end,
-       en_vivo        = case when $2 then now() else tdj_dias.en_vivo end,
+       en_vivo        = case when $2 then null else tdj_dias.en_vivo end, -- cerro el juego: deja de figurar "jugando"
        actualizado    = now()`,
-    [JSON.stringify(filas), vivo]
+    [JSON.stringify(filas), body.cerrado === true]
   );
   return res.status(200).json({ ok: true, filas: filas.length });
 }
