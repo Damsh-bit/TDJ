@@ -89,57 +89,70 @@ try {
         [bool](Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^Wow' })
     }
 
-    # ---- Modo en vivo: mientras el juego este abierto ----
+    # ---- Subida desde SavedVariables (lo que guarda el addon al cerrar, con /reload o al cambiar de personaje) ----
+    # Devuelve $true si subio algo. Solo sube si el archivo cambio desde la ultima vez.
+    function Subir-Guardado {
+        $archivos = @()
+        foreach ($r in $raices) {
+            $archivos += @(Get-ChildItem -Path "$r\*\WTF\Account\*\SavedVariables\TiempoDeJuego.lua" -ErrorAction SilentlyContinue)
+        }
+        if ($archivos.Count -eq 0) {
+            if ($raices.Count -eq 0) { Log 'No encontré la carpeta de WoW. Ponela en config.json (carpetaWow).' }
+            else { Log 'Todavía no hay datos del addon: aparecen la primera vez que cerrás el juego o hacés /reload con el addon instalado.' }
+            return $false
+        }
+        $huella = ($archivos | ForEach-Object { "$($_.FullName)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';'
+        if ((Test-Path $estadoArchivo) -and ((Get-Content $estadoArchivo -Raw).Trim() -eq $huella) -and -not $env:TDJ_PRUEBA) { return $false }
+
+        $filas = @{}
+        foreach ($a in $archivos) {
+            $txt = [IO.File]::ReadAllText($a.FullName, [Text.Encoding]::UTF8)
+            if ($txt -notmatch '\["export"\]\s*=\s*"([^"]*)"') { continue }
+            foreach ($reg in ($Matches[1] -split '~')) {
+                $f = Convertir-Fila $reg
+                if (-not $f) { continue }
+                $k = "$($f.persona)|$($f.dia)"
+                $prev = $filas[$k]
+                if (-not $prev -or ($f.fuente -eq 'propio' -and $prev.fuente -ne 'propio') -or
+                    ($f.fuente -eq $prev.fuente -and $f.segundos -gt $prev.segundos)) { $filas[$k] = $f }
+            }
+        }
+        if ($filas.Count -eq 0) { Log 'El archivo del addon todavía no tiene datos (cerrá el juego o hacé /reload una vez).'; return $false }
+
+        Subir $filas.Values $false
+        if (-not $env:TDJ_PRUEBA) {
+            Set-Content -Path $estadoArchivo -Value $huella -Encoding UTF8
+            Log "Subidas $($filas.Count) filas del archivo del addon."
+        }
+        return $true
+    }
+
+    # ---- Mientras el juego esta abierto: cada minuto, lo en vivo del registro de chat
+    #      y, si cambio, el archivo del addon (por ejemplo despues de un /reload) ----
     if (Juego-Abierto) {
         $ultimoVivo = ''
+        $avisoSinVivo = $false
+        $vueltas = 0
         while (Juego-Abierto) {
             try {
                 $linea = Leer-Vivo
                 if ($linea -and $linea -ne $ultimoVivo) {
                     $fila = Convertir-Fila $linea
                     if ($fila) { Subir @($fila) $true; $ultimoVivo = $linea; Log "En vivo: $($fila.persona) $([math]::Round($fila.segundos / 60)) min hoy." }
+                } elseif (-not $linea -and -not $avisoSinVivo -and $vueltas -ge 5) {
+                    Log 'En vivo: el registro de chat todavía no tiene datos del addon (se sube igual con cada /reload y al cerrar).'
+                    $avisoSinVivo = $true
                 }
-            } catch { Log "ERROR en vivo: $($_.Exception.Message)" }
+                [void](Subir-Guardado)
+            } catch { Log "ERROR en vivo: $($_.Exception.Message) $($_.ErrorDetails.Message)" }
             if ($env:TDJ_PRUEBA) { break }
+            $vueltas++
             Start-Sleep -Seconds 60
         }
         if (-not $env:TDJ_PRUEBA) { Start-Sleep -Seconds 15 }  # le da tiempo al juego a guardar al cerrar
     }
 
-    # ---- Subida completa desde SavedVariables ----
-    $archivos = @()
-    foreach ($r in $raices) {
-        $archivos += @(Get-ChildItem -Path "$r\*\WTF\Account\*\SavedVariables\TiempoDeJuego.lua" -ErrorAction SilentlyContinue)
-    }
-    if ($archivos.Count -eq 0) {
-        if ($raices.Count -eq 0) { Log 'No encontré la carpeta de WoW. Ponela en config.json (carpetaWow).' }
-        else { Log 'Todavía no hay datos del addon: aparecen la primera vez que cerrás el juego con el addon instalado.' }
-        exit 0
-    }
-
-    $huella = ($archivos | ForEach-Object { "$($_.FullName)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';'
-    if ((Test-Path $estadoArchivo) -and ((Get-Content $estadoArchivo -Raw).Trim() -eq $huella) -and -not $env:TDJ_PRUEBA) { exit 0 }
-
-    $filas = @{}
-    foreach ($a in $archivos) {
-        $txt = [IO.File]::ReadAllText($a.FullName, [Text.Encoding]::UTF8)
-        if ($txt -notmatch '\["export"\]\s*=\s*"([^"]*)"') { continue }
-        foreach ($reg in ($Matches[1] -split '~')) {
-            $f = Convertir-Fila $reg
-            if (-not $f) { continue }
-            $k = "$($f.persona)|$($f.dia)"
-            $prev = $filas[$k]
-            if (-not $prev -or ($f.fuente -eq 'propio' -and $prev.fuente -ne 'propio') -or
-                ($f.fuente -eq $prev.fuente -and $f.segundos -gt $prev.segundos)) { $filas[$k] = $f }
-        }
-    }
-    if ($filas.Count -eq 0) { Log 'El archivo del addon todavía no tiene datos (cerrá el juego o hacé /reload una vez).'; exit 0 }
-
-    Subir $filas.Values $false
-    if (-not $env:TDJ_PRUEBA) {
-        Set-Content -Path $estadoArchivo -Value $huella -Encoding UTF8
-        Log "Subidas $($filas.Count) filas."
-    }
+    [void](Subir-Guardado)
 }
 catch {
     Log "ERROR: $($_.Exception.Message) $($_.ErrorDetails.Message)"

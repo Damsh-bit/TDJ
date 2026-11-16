@@ -4,7 +4,7 @@
 -- panel de opciones y datos "en vivo" para la web.
 
 local PREFIJO = "TDJ1"
-local VERSION = "2.1"
+local VERSION = "2.2"
 local ENVIO_CADA = 60          -- segundos entre envios de estado a los amigos
 local VIVO_CADA = 120          -- segundos entre datos "en vivo" para la web
 local ONLINE_SI_VISTO = 180    -- si no llega nada en este tiempo, el amigo figura desconectado
@@ -403,11 +403,23 @@ end
 
 local vivoEnviadoEn, vivoFallas, vivoRoto = 0, 0, false
 
+-- El juego guarda el registro de chat en memoria y lo escribe al disco recien
+-- al cerrar. Apagarlo y prenderlo lo obliga a escribirlo, asi el subidor ve
+-- la linea "TDJ:" mientras jugas.
+local function volcarRegistroChat()
+    if LoggingChat and LoggingChat() then
+        vivoEnviadoEn = GetTime() -- para ocultar los avisos "registro de chat activado/desactivado"
+        LoggingChat(false)
+        LoggingChat(true)
+    end
+end
+
 local function enviarVivo()
     if not OP.enVivo or vivoRoto then return end
     local r, d = registroHoy()
     vivoEnviadoEn = GetTime()
     pcall(SendChatMessage, "TDJ:" .. filaPropia(d, r), "WHISPER", nil, miNombreCompleto())
+    if C_Timer and C_Timer.After then C_Timer.After(2, volcarRegistroChat) end
 end
 
 -- Patron para reconocer el aviso "no hay ningun jugador llamado X" en cualquier idioma
@@ -425,6 +437,7 @@ local function filtroVivo(_, _, msg) return type(msg) == "string" and msg:find("
 -- el modo en vivo se apaga por esta sesion (las horas se suben igual al cerrar).
 local function filtroSistema(_, _, msg)
     if type(msg) ~= "string" or GetTime() - vivoEnviadoEn > 4 then return false end
+    if msg == CHATLOGENABLED or msg == CHATLOGDISABLED then return true end
     local esNuestro
     if patronNoEncontrado then esNuestro = msg:find(patronNoEncontrado)
     else esNuestro = msg:find(UnitName("player"), 1, true) end
