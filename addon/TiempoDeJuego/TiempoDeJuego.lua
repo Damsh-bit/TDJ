@@ -4,7 +4,7 @@
 -- panel de opciones y datos "en vivo" para la web.
 
 local PREFIJO = "TDJ1"
-local VERSION = "2.0"
+local VERSION = "2.1"
 local ENVIO_CADA = 60          -- segundos entre envios de estado a los amigos
 local VIVO_CADA = 120          -- segundos entre datos "en vivo" para la web
 local ONLINE_SI_VISTO = 180    -- si no llega nada en este tiempo, el amigo figura desconectado
@@ -391,16 +391,64 @@ local function filaPropia(d, r)
         r.kills or 0, r.xp or 0 }, ",")
 end
 
-local function enviarVivo()
-    if not OP.enVivo then return end
-    local r, d = registroHoy()
-    pcall(SendChatMessage, "TDJ:" .. filaPropia(d, r), "WHISPER", nil, UnitName("player"))
+-- En WoW Forever los personajes se llaman "Nombre-Reino": hay que susurrar con el
+-- nombre completo o el servidor contesta "no hay ningun jugador con ese nombre".
+local function miNombreCompleto()
+    local nombre, reino = UnitFullName and UnitFullName("player")
+    nombre = nombre or UnitName("player")
+    if not reino or reino == "" then reino = GetNormalizedRealmName and GetNormalizedRealmName() end
+    if reino and reino ~= "" then return nombre .. "-" .. reino end
+    return nombre
 end
 
+local vivoEnviadoEn, vivoFallas, vivoRoto = 0, 0, false
+
+local function enviarVivo()
+    if not OP.enVivo or vivoRoto then return end
+    local r, d = registroHoy()
+    vivoEnviadoEn = GetTime()
+    pcall(SendChatMessage, "TDJ:" .. filaPropia(d, r), "WHISPER", nil, miNombreCompleto())
+end
+
+-- Patron para reconocer el aviso "no hay ningun jugador llamado X" en cualquier idioma
+local patronNoEncontrado
+if type(ERR_CHAT_PLAYER_NOT_FOUND_S) == "string" then
+    local p = ERR_CHAT_PLAYER_NOT_FOUND_S:gsub("[%%%(%)%.%+%-%*%?%[%]%^%$]", "%%%0") -- escapa caracteres especiales
+    p = p:gsub("%%%%s", ".-") -- el "%s" del nombre (ya escapado como "%%s") pasa a ser "cualquier cosa"
+    patronNoEncontrado = "^" .. p .. "$"
+end
+local vivoContadoPara = -1
+
 local function filtroVivo(_, _, msg) return type(msg) == "string" and msg:find("^TDJ:") ~= nil end
+
+-- Si el susurro falla, el aviso del sistema no se muestra; a las 3 fallas seguidas
+-- el modo en vivo se apaga por esta sesion (las horas se suben igual al cerrar).
+local function filtroSistema(_, _, msg)
+    if type(msg) ~= "string" or GetTime() - vivoEnviadoEn > 4 then return false end
+    local esNuestro
+    if patronNoEncontrado then esNuestro = msg:find(patronNoEncontrado)
+    else esNuestro = msg:find(UnitName("player"), 1, true) end
+    if not esNuestro then return false end
+    -- El filtro corre una vez por cada ventana de chat: se cuenta una sola falla por susurro
+    if vivoContadoPara == vivoEnviadoEn then return true end
+    vivoContadoPara = vivoEnviadoEn
+    vivoFallas = vivoFallas + 1
+    if vivoFallas >= 3 and not vivoRoto then
+        vivoRoto = true
+        chat(ICONO.casi, "Los datos en vivo no funcionan en este servidor. Tus horas se suben igual cuando cerrás el juego.")
+    end
+    return true
+end
+
+local function alSusurroOk(_, _, msg)
+    if filtroVivo(nil, nil, msg) then vivoFallas = 0; return true end
+    return false
+end
+
 if ChatFrame_AddMessageEventFilter then
     ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", filtroVivo)
-    ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER_INFORM", filtroVivo)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER_INFORM", alSusurroOk)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", filtroSistema)
 end
 
 local function activarRegistroChat()
