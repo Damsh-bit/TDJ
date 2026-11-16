@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiempo de Juego</title>
+<meta name="description" content="Horas, estadísticas y logros de WoW Forever del grupo.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Cinzel+Decorative:wght@700&family=Marcellus&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/tdj.css">
+<style>html, body { margin: 0; height: 100%; background: #0b0806; }</style>
+</head>
+<body>
+<div class="tdj"><main class="app" id="app"></main></div>
+<script src="/tdj.js"></script>
+<script>TDJ.iniciar(document.getElementById("app"), { fuente: "/api/datos" });</script>
+</body>
+</html>

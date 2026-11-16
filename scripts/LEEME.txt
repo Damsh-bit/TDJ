@@ -1,0 +1,31 @@
+TIEMPO DE JUEGO 2.0 - como instalarlo (cada uno del grupo)
+==========================================================
+
+1) EL ADDON
+   - Copia la carpeta "TiempoDeJuego" dentro de:
+       World of Warcraft\_forever_\Interface\AddOns\
+     Si ya tenias la version anterior, reemplazala.
+   - Abri el juego. Vas a ver la barra arriba de la pantalla.
+   - Toca el engranaje de la barra (o escribi /tdj) para abrir las
+     opciones: ahi pones tu nombre, el limite semanal (42 horas) y
+     elegis que avisos queres ver.
+
+2) EL SUBIDOR (para que tus datos aparezcan en la web)
+   - Copia la carpeta "Subidor" a un lugar fijo (por ejemplo el
+     Escritorio o Documentos) y no la borres. Si ya la tenias,
+     reemplaza todos los archivos.
+   - Doble click en "instalar.bat". Listo:
+       * cada 5 minutos sube tus datos solo, sin abrir ventanas;
+       * mientras jugas, manda tus horas "en vivo" cada pocos minutos;
+       * funciona aunque la notebook este a bateria.
+   - Si tu WoW no esta en Archivos de programa, abri config.json con el
+     Bloc de notas y pone la carpeta en "carpetaWow", por ejemplo:
+       "carpetaWow": "D:\\Juegos\\World of Warcraft"
+   - Si algo falla, mira subir.log dentro de la carpeta.
+   - Para sacarlo: desinstalar.bat
+
+3) LA WEB
+   https://alzstats.pro/wow
+   https://tiempo-de-juego.vercel.app
+
+No compartas config.json fuera del grupo: tiene la clave para subir datos.

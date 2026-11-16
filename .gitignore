@@ -1,0 +1,14 @@
+# Clave del grupo y datos de cada PC: nunca al repo (es publico)
+subidor/config.json
+subidor/id.txt
+subidor/ultimo.txt
+subidor/subir.log
+
+# Paquete armado para los amigos (lleva la clave adentro)
+dist/
+*.zip
+
+# Vercel y dependencias
+.vercel/
+.env*
+node_modules/
