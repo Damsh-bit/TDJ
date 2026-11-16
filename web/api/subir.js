@@ -67,12 +67,13 @@ export default async function handler(req, res) {
   // de hoy y la marca de "jugando ahora". Nunca pisa los segundos exactos.
   if (vivo) {
     await sql.query(
-      `insert into tdj_dias (persona, dia, segundos, nivel, personaje, clase, limite_semanal, fuente, segundos_vivo, en_vivo)
-       select persona, dia, 0, nivel, personaje, clase, limite_semanal, 'propio', segundos, now()
+      `insert into tdj_dias (persona, dia, segundos, nivel, personaje, clase, limite_semanal, fuente, segundos_vivo, en_vivo, visto)
+       select persona, dia, 0, nivel, personaje, clase, limite_semanal, 'propio', segundos, now(), now()
        from jsonb_to_recordset($1::jsonb) as x(persona text, dia date, segundos int, nivel smallint, personaje text,
             clase text, limite_semanal int)
        on conflict (persona, dia) do update set
          segundos_vivo  = excluded.segundos_vivo,
+         visto          = now(),
          en_vivo        = now(),
          nivel          = greatest(tdj_dias.nivel, excluded.nivel),
          limite_semanal = greatest(tdj_dias.limite_semanal, excluded.limite_semanal),
@@ -102,6 +103,7 @@ export default async function handler(req, res) {
        limite_semanal = greatest(tdj_dias.limite_semanal, ${propio("limite_semanal")}),
        fuente         = case when tdj_dias.fuente = 'propio' then 'propio' else excluded.fuente end,
        en_vivo        = case when $2 then null else tdj_dias.en_vivo end, -- cerro el juego: deja de figurar "jugando"
+       visto          = case when $2 and excluded.fuente = 'propio' then now() else tdj_dias.visto end,
        actualizado    = now()`,
     [JSON.stringify(filas), body.cerrado === true]
   );

@@ -27,3 +27,5 @@ alter table tdj_dias add column if not exists en_vivo    timestamptz;
 -- v2.3: estimacion de hoy mientras la persona juega (la manda el subidor al ver el juego abierto).
 -- No pisa "segundos": el dato exacto llega con cada /reload y al cerrar el juego.
 alter table tdj_dias add column if not exists segundos_vivo integer not null default 0 check (segundos_vivo between 0 and 86400);
+-- v2.4: ultima vez que se vio a la persona jugando (cada dato en vivo y al cerrar el juego)
+alter table tdj_dias add column if not exists visto timestamptz;
