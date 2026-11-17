@@ -1,10 +1,9 @@
-# Clave del grupo y datos de cada PC: nunca al repo (es publico)
-subidor/config.json
+# Datos de cada PC
 subidor/id.txt
 subidor/ultimo.txt
 subidor/subir.log
 
-# Paquete armado para los amigos (lleva la clave adentro)
+# Paquete armado para los amigos
 dist/
 *.zip
 

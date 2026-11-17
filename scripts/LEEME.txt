@@ -28,4 +28,4 @@ TIEMPO DE JUEGO 2.0 - como instalarlo (cada uno del grupo)
    https://alzstats.pro/wow
    https://tiempo-de-juego.vercel.app
 
-No compartas config.json fuera del grupo: tiene la clave para subir datos.
+La clave del grupo ya viene puesta en Subidor\config.json.
