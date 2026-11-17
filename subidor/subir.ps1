@@ -162,18 +162,18 @@ try {
                 }
                 Subir-Guardado
             } catch { Log "ERROR en vivo: $($_.Exception.Message) $($_.ErrorDetails.Message)" }
-            if ($env:TDJ_PRUEBA) { break }
+            if ($env:TDJ_PRUEBA -or $env:TDJ_UNA_VEZ) { break }  # prueba del instalador: una sola vuelta
             Start-Sleep -Seconds 60
             $inicio = Inicio-Juego
         }
-        if (-not $env:TDJ_PRUEBA) {
+        if (-not $env:TDJ_PRUEBA -and -not $env:TDJ_UNA_VEZ) {
             Start-Sleep -Seconds 15  # le da tiempo al juego a guardar al cerrar
             Subir-Guardado $true      # dato exacto y deja de figurar "jugando ahora"
             exit 0
         }
     }
 
-    Subir-Guardado
+    if (-not $inicio -or $env:TDJ_PRUEBA) { Subir-Guardado }
 }
 catch {
     Log "ERROR: $($_.Exception.Message) $($_.ErrorDetails.Message)"

@@ -13,9 +13,11 @@ if not exist "%~dp0config.json" (
 )
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0instalar.ps1"
 echo.
-echo  Probando una subida ahora...
+echo  Probando una subida ahora (tarda unos segundos^)...
+set TDJ_UNA_VEZ=1
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0subir.ps1"
 echo.
+set TDJ_UNA_VEZ=
 echo  Listo. Si algo falla, mira el archivo subir.log en esta carpeta.
 echo  Para desinstalar: desinstalar.bat
 echo.

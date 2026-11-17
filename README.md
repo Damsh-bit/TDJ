@@ -26,8 +26,8 @@ Addon de **WoW Forever** para un grupo de amigos: cada uno tiene un **límite se
 ## Cómo llegan los datos a la web
 
 1. Al cerrar el juego (o con `/reload`) el addon guarda los últimos 60 días en `SavedVariables`.
-2. **En vivo**: mientras jugás, cada 2 minutos el addon se susurra a sí mismo una línea `TDJ:...` (no se ve en el chat). Con el registro de chat activado, el juego la escribe en `Logs\WoWChatLog.txt` y el subidor la lee cada minuto.
-3. El subidor (tarea de Windows cada 5 minutos) manda todo a `POST /api/subir` con la clave del grupo.
+2. **En vivo**: mientras el juego está abierto, el subidor manda cada minuto una estimación de lo jugado hoy (lo último que guardó el addon + el tiempo que pasó desde entonces) y la marca de "jugando ahora". En la web se ve como "Hoy ~45m (en vivo)". El dato exacto reemplaza a la estimación con cada `/reload` y al cerrar el juego.
+3. El subidor (tarea de Windows cada 5 minutos) manda todo a `POST /api/subir` con la clave del grupo. La prueba de `instalar.bat` hace una sola vuelta y termina, aunque el juego esté abierto.
 
 ## Para tus amigos
 
